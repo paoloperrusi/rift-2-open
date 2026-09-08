@@ -1,4 +1,4 @@
-﻿/**
+/**
  * RIFT Core - The Motor Engine
  * Headless, deterministic pipeline runner.
  */
@@ -71,7 +71,10 @@ export class RiftEngine {
     if (!GENERATORS[id]) throw new Error(`Unknown generator: ${id}`);
     const gen = GENERATORS[id];
     const defaultParams = {};
-    for (const p of gen.params) defaultParams[p.key] = p.default;
+    for (const p of gen.params) {
+      const k = p.key || p.id;
+      defaultParams[k] = p.default !== undefined ? p.default : p.def;
+    }
 
     this.source = {
       type: 'generator',
@@ -138,7 +141,10 @@ export class RiftEngine {
     if (!EFFECTS[id]) throw new Error(`Unknown effect: ${id}`);
     const eff = EFFECTS[id];
     const defaultParams = {};
-    for (const p of eff.params) defaultParams[p.key] = p.default;
+    for (const p of eff.params) {
+      const k = p.key || p.id;
+      defaultParams[k] = p.default !== undefined ? p.default : p.def;
+    }
 
     this.effects.push({
       id,

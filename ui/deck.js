@@ -1,4 +1,4 @@
-﻿/**
+/**
  * RIFT UI - Control Deck
  * Sleek, high-density control deck: Generate/Source -> Geometry -> Effects Stack -> Presets.
  */
@@ -467,34 +467,94 @@ export class RiftControlDeck {
   openAddEffectPicker() {
     const modal = document.createElement('div');
     modal.className = 'rift-modal-backdrop';
+
+    const categories = ['all', 'glitch', 'mirror', 'distort', 'corrupt', 'pixel', 'color', 'geometry', '3d', 'fractal', 'art'];
+    let currentCat = 'all';
+    let searchQuery = '';
+
+    const renderGrid = () => {
+      const filtered = Object.values(EFFECTS).filter(eff => {
+        const cat = eff.cat || eff.category || 'misc';
+        if (currentCat !== 'all' && cat !== currentCat) return false;
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          const matchName = (eff.name || '').toLowerCase().includes(q);
+          const matchDesc = (eff.desc || eff.description || '').toLowerCase().includes(q);
+          const matchCat = cat.toLowerCase().includes(q);
+          return matchName || matchDesc || matchCat;
+        }
+        return true;
+      });
+
+      const grid = modal.querySelector('.effect-picker-grid');
+      if (!grid) return;
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div style="grid-column:span 2;text-align:center;padding:30px;color:var(--text-muted);font-size:12px;">No effects match your search</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(eff => `
+        <div class="effect-picker-card" data-eff="${eff.id}">
+          <div class="flex-row justify-between align-center">
+            <div class="picker-card-name">${eff.name}</div>
+            <span class="tag-cat">${eff.cat || eff.category || 'fx'}</span>
+          </div>
+          <div class="picker-card-desc">${eff.desc || eff.description || ''}</div>
+          ${eff.math ? `<div class="picker-card-math">${eff.math}</div>` : ''}
+        </div>
+      `).join('');
+
+      grid.querySelectorAll('.effect-picker-card').forEach(c => {
+        c.onclick = () => {
+          const id = c.dataset.eff;
+          this.store.recordAction(`Add Effect: ${EFFECTS[id].name}`);
+          this.engine.addEffect(id);
+          modal.remove();
+          this.render();
+        };
+      });
+    };
+
     modal.innerHTML = `
-      <div class="rift-modal">
+      <div class="rift-modal" style="width: 580px; max-width: 95vw;">
         <div class="modal-header">
-          <h3>Add Effect to Chain</h3>
+          <div class="flex-row align-center gap-5">
+            <h3>Add Effect to Chain</h3>
+            <span class="badge-count">${Object.keys(EFFECTS).length} available</span>
+          </div>
           <button class="modal-close">✕</button>
         </div>
-        <div class="effect-picker-grid">
-          ${Object.values(EFFECTS).map(eff => `
-            <div class="effect-picker-card" data-eff="${eff.id}">
-              <div class="picker-card-name">${eff.name}</div>
-              <div class="picker-card-desc">${eff.description}</div>
-              <span class="tag-cat">${eff.category}</span>
-            </div>
-          `).join('')}
+
+        <input type="text" class="deck-input" id="modal-eff-search" placeholder="Search 64+ effects (e.g. scanline, mirror, luma, voronoi, mobius)..." style="width:100%;height:30px;" />
+
+        <div class="category-pills" id="modal-cat-pills">
+          ${categories.map(c => `<button class="pill-btn ${c === currentCat ? 'active' : ''}" data-cat="${c}">${c}</button>`).join('')}
         </div>
+
+        <div class="effect-picker-grid"></div>
       </div>
     `;
 
     document.body.appendChild(modal);
+    renderGrid();
+
     modal.querySelector('.modal-close').onclick = () => modal.remove();
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-    modal.querySelectorAll('.effect-picker-card').forEach(c => {
-      c.onclick = () => {
-        const id = c.dataset.eff;
-        this.store.recordAction(`Add Effect: ${EFFECTS[id].name}`);
-        this.engine.addEffect(id);
-        modal.remove();
-        this.render();
+
+    const searchInp = modal.querySelector('#modal-eff-search');
+    searchInp.focus();
+    searchInp.oninput = (e) => {
+      searchQuery = e.target.value.trim();
+      renderGrid();
+    };
+
+    modal.querySelectorAll('.pill-btn').forEach(btn => {
+      btn.onclick = () => {
+        modal.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCat = btn.dataset.cat;
+        renderGrid();
       };
     });
   }
@@ -583,41 +643,47 @@ export class RiftControlDeck {
     paramDefs.forEach(p => {
       const row = document.createElement('div');
       row.className = 'param-row';
+      const key = p.key || p.id;
+      const label = p.label || key;
+      const defVal = p.default !== undefined ? p.default : (p.def !== undefined ? p.def : 0);
+      const val = paramValues[key] !== undefined ? paramValues[key] : defVal;
 
-      if (p.type === 'enum') {
+      if (p.type === 'enum' && p.options) {
         row.innerHTML = `
-          <label class="param-label">${p.label}</label>
+          <label class="param-label" title="${label}">${label}</label>
           <select class="deck-select" style="flex:1;">
             ${p.options.map(opt => `
-              <option value="${opt.value}" ${paramValues[p.key] === opt.value ? 'selected' : ''}>${opt.label}</option>
+              <option value="${opt.value}" ${String(val) === String(opt.value) ? 'selected' : ''}>${opt.label}</option>
             `).join('')}
           </select>
         `;
-        row.querySelector('select').onchange = (e) => onChange(p.key, e.target.value);
+        row.querySelector('select').onchange = (e) => onChange(key, e.target.value);
       } else if (p.type === 'bool') {
         row.innerHTML = `
           <label class="checkbox-label">
-            <input type="checkbox" ${paramValues[p.key] ? 'checked' : ''} />
-            <span>${p.label}</span>
+            <input type="checkbox" ${val ? 'checked' : ''} />
+            <span>${label}</span>
           </label>
         `;
-        row.querySelector('input').onchange = (e) => onChange(p.key, e.target.checked);
+        row.querySelector('input').onchange = (e) => onChange(key, e.target.checked);
       } else {
-        // float or int
-        const val = paramValues[p.key] ?? p.default;
+        const min = p.min !== undefined ? p.min : 0;
+        const max = p.max !== undefined ? p.max : 100;
+        const step = p.step || (max - min > 10 ? 1 : 0.05);
+
         row.innerHTML = `
-          <label class="param-label">${p.label}</label>
+          <label class="param-label" title="${label}">${label}</label>
           <div class="flex-row align-center gap-5" style="flex:1;">
-            <input type="range" class="deck-slider" min="${p.min}" max="${p.max}" step="${p.step || 1}" value="${val}" />
+            <input type="range" class="deck-slider" min="${min}" max="${max}" step="${step}" value="${val}" />
             <span class="param-val">${val}</span>
           </div>
         `;
         const slider = row.querySelector('.deck-slider');
         const disp = row.querySelector('.param-val');
         slider.oninput = (e) => {
-          const num = p.type === 'int' ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+          const num = step >= 1 ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
           disp.textContent = num;
-          onChange(p.key, num);
+          onChange(key, num);
         };
       }
       containerEl.appendChild(row);
