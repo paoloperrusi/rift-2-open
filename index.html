@@ -1,0 +1,639 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RIFT — Procedural Image Synthesis & Glitch Engine</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>" />
+  <style>
+    :root {
+      --bg: #07070a;
+      --bg1: #0e0e13;
+      --bg2: #14141c;
+      --bg3: #1b1b26;
+      --bg4: #232332;
+      --border: #262638;
+      --border-subtle: #1c1c28;
+      --acc: #6c5ce7;
+      --acc-hover: #7d6ef0;
+      --acc-dim: rgba(108, 92, 231, 0.15);
+      --text: #eeecf8;
+      --text-muted: #8b88a4;
+      --text-sub: #5e5b74;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
+      --r: 5px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font); user-select: none; }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Top Bar */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 42px;
+      padding: 0 14px;
+      background: var(--bg1);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 20;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      font-family: var(--mono);
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.15em;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-logo span { color: var(--acc); }
+
+    .stat-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 3px 7px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      color: var(--text-muted);
+    }
+
+    .center-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mode-btn-group {
+      display: flex;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.active { background: var(--acc); color: #ffffff; }
+
+    /* Work Area */
+    main {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 42px);
+      position: relative;
+    }
+
+    #viewport-container {
+      flex: 1;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      background: #050508;
+      background-image: radial-gradient(circle at center, #0a0a10 0%, #030305 100%);
+    }
+
+    #rift-viewport-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Right Control Deck */
+    #deck-container {
+      width: 320px;
+      height: 100%;
+      background: var(--bg1);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .deck-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      padding: 0 4px;
+    }
+
+    .deck-tab {
+      flex: 1;
+      padding: 10px 4px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .deck-tab:hover { color: var(--text); }
+    .deck-tab.active {
+      color: var(--text);
+      border-bottom-color: var(--acc);
+      background: rgba(108, 92, 231, 0.08);
+    }
+
+    .badge-count {
+      font-family: var(--mono);
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 8px;
+      background: var(--acc);
+      color: #fff;
+    }
+
+    .deck-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .deck-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-title {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .deck-hint {
+      font-size: 11px;
+      color: var(--text-sub);
+      line-height: 1.4;
+    }
+
+    /* Buttons & Inputs */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: var(--r);
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover { background: var(--bg3); border-color: var(--text-sub); }
+    .btn:active { transform: scale(0.98); }
+    .btn.sm { padding: 4px 8px; font-size: 10px; height: 26px; }
+    .btn.xs { padding: 2px 6px; font-size: 9.5px; height: 20px; }
+    .btn.acc { background: var(--acc); border-color: var(--acc); color: #ffffff; }
+    .btn.acc:hover { background: var(--acc-hover); }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+    .btn.ghost:hover { background: var(--bg3); color: var(--text); }
+    .btn.icon-btn { padding: 0; width: 26px; height: 26px; }
+
+    .deck-input {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 4px 8px;
+      height: 26px;
+      outline: none;
+    }
+
+    .deck-input:focus { border-color: var(--acc); }
+    .deck-input.num { width: 100%; text-align: right; border: none; background: transparent; padding: 0; }
+
+    .deck-select {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      color: var(--text);
+      font-size: 11px;
+      padding: 4px 8px;
+      height: 26px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .deck-slider {
+      flex: 1;
+      height: 4px;
+      appearance: none;
+      background: var(--bg4);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .deck-slider::-webkit-slider-thumb {
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--acc);
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(108, 92, 231, 0.5);
+    }
+
+    .param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+    }
+
+    .param-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      min-width: 85px;
+    }
+
+    .param-val {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: right;
+      width: 38px;
+    }
+
+    .checkbox-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .flex-row { display: flex; }
+    .justify-between { justify-content: space-between; }
+    .align-center { align-items: center; }
+    .gap-4 { gap: 4px; }
+    .gap-5 { gap: 5px; }
+
+    /* Layout Grids */
+    .dims-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .dim-input-box {
+      display: flex;
+      align-items: center;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 0 6px;
+      height: 26px;
+    }
+
+    .dim-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-sub);
+    }
+
+    .quick-transform-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+    }
+
+    .quick-transform-grid button {
+      gap: 4px;
+      padding: 0;
+      white-space: nowrap;
+    }
+
+    .source-mode-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+
+    .upload-dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--r);
+      padding: 24px 10px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--bg2);
+      transition: all 0.2s ease;
+    }
+
+    .upload-dropzone:hover, .upload-dropzone.drag-over {
+      border-color: var(--acc);
+      background: var(--acc-dim);
+    }
+
+    .dropzone-icon { font-size: 24px; color: var(--acc); margin-bottom: 6px; }
+    .dropzone-text { font-size: 11px; color: var(--text-muted); }
+
+    /* Effects Stack */
+    .effects-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .effect-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .effect-card:hover { border-color: var(--acc); }
+    .effect-card.disabled { opacity: 0.55; border-color: var(--border-subtle); }
+
+    .effect-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .effect-card-name {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .effect-card-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .empty-stack-card {
+      background: var(--bg2);
+      border: 1px dashed var(--border);
+      border-radius: var(--r);
+      padding: 24px 10px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Presets Grid */
+    .presets-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .preset-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .preset-card:hover { border-color: var(--acc); background: var(--bg3); }
+    .preset-card-name { font-size: 11.5px; font-weight: 600; color: var(--text); }
+    .preset-card-meta { font-size: 9.5px; color: var(--text-sub); }
+
+    /* Modal */
+    .rift-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rift-modal {
+      width: 480px;
+      max-width: 90vw;
+      background: var(--bg1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-header h3 { font-size: 13px; font-weight: 600; }
+    .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; }
+
+    .effect-picker-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .effect-picker-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .effect-picker-card:hover { border-color: var(--acc); background: var(--bg3); }
+    .picker-card-name { font-size: 11px; font-weight: 600; color: var(--text); }
+    .picker-card-desc { font-size: 9.5px; color: var(--text-muted); line-height: 1.3; }
+    .tag-cat { font-family: var(--mono); font-size: 8.5px; color: var(--acc); text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Master Header -->
+    <header>
+      <div class="brand-section">
+        <div class="brand-logo">RIFT<span>.</span></div>
+        <span class="stat-badge" id="rift-dims-badge">800 × 600 px</span>
+        <button class="stat-badge" id="rift-zoom-badge" style="cursor:pointer;" title="Click or double-click to reset 100%">100%</button>
+      </div>
+
+      <div class="center-controls">
+        <button class="btn sm icon-btn" id="btn-undo" title="Undo (Ctrl+Z)">↶</button>
+        <button class="btn sm icon-btn" id="btn-redo" title="Redo (Ctrl+Y)">↷</button>
+
+        <div class="mode-btn-group">
+          <button class="mode-btn" data-mode="orig">○ orig</button>
+          <button class="mode-btn active" data-mode="result">● result</button>
+          <button class="mode-btn" data-mode="split">◐ split</button>
+        </div>
+      </div>
+
+      <div class="flex-row gap-5 align-center">
+        <button class="btn sm" id="btn-export-recipe" title="Export Current Pipeline as JSON Recipe">Recipe ⤓</button>
+        <button class="btn sm acc" id="btn-export-image" title="Download High-Resolution PNG">↓ Export PNG</button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main>
+      <div id="viewport-container"></div>
+      <div id="deck-container"></div>
+    </main>
+  </div>
+
+  <!-- Application Bootstrap -->
+  <script type="module">
+    import { RiftEngine } from './core/engine.js';
+    import { RiftStore } from './ui/store.js';
+    import { RiftViewport } from './ui/viewport.js';
+    import { RiftControlDeck } from './ui/deck.js';
+
+    // 1. Initialize Engine & Store
+    const engine = new RiftEngine();
+    const store = new RiftStore(engine);
+
+    // 2. Initialize Viewport & Control Deck
+    const vpContainer = document.getElementById('viewport-container');
+    const viewport = new RiftViewport(vpContainer, engine, store);
+
+    const deckContainer = document.getElementById('deck-container');
+    const deck = new RiftControlDeck(deckContainer, engine, store, viewport);
+
+    // 3. Header Wiring
+    const btnUndo = document.getElementById('btn-undo');
+    const btnRedo = document.getElementById('btn-redo');
+    btnUndo.onclick = () => { store.undo(); viewport.draw(); };
+    btnRedo.onclick = () => { store.redo(); viewport.draw(); };
+
+    // Mode buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        viewport.setViewMode(btn.dataset.mode);
+      };
+    });
+
+    // Zoom badge reset
+    const zoomBadge = document.getElementById('rift-zoom-badge');
+    zoomBadge.onclick = () => viewport.zoom100();
+    zoomBadge.ondblclick = () => viewport.zoom100();
+
+    // Export buttons
+    document.getElementById('btn-export-recipe').onclick = () => {
+      const recipe = engine.exportRecipe('Exported RIFT Recipe');
+      const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rift-recipe-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('btn-export-image').onclick = () => {
+      if (!engine.resultBuffer) return;
+      const c = document.createElement('canvas');
+      c.width = engine.resultBuffer.width;
+      c.height = engine.resultBuffer.height;
+      c.getContext('2d').putImageData(engine.resultBuffer, 0, 0);
+      const a = document.createElement('a');
+      a.href = c.toDataURL('image/png');
+      a.download = `rift-${Date.now()}.png`;
+      a.click();
+    };
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) store.redo();
+        else store.undo();
+        viewport.draw();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        store.redo();
+        viewport.draw();
+      }
+    });
+
+    // Initial render & fit
+    await engine.render();
+    viewport.zoomFit();
+  </script>
+</body>
+</html>
